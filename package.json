@@ -1,0 +1,85 @@
+{
+  "name": "dsh-cat-diary",
+  "version": "1.0.0",
+  "description": "猫娘日记 + 好感度：每天把当天全部对话写成四栏日记，次日自动注入速读卡；好感度子插件每轮自动判定，侧边栏可视化。Catgirl diary + affinity score for DeepSeek Harness: a four-section daily journal with auto-injected brief, plus a per-turn affinity sub-plugin with a sidebar panel.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./collect": "./lib/collect.js",
+    "./diary": "./lib/diary.js",
+    "./affinity": "./lib/affinity-reader.js",
+    "./sessions": "./lib/sessions.js",
+    "./decode": "./lib/decode.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./autowrite": "./lib/autowrite.js"
+  },
+  "bin": {
+    "dsh-cat-diary": "bin/diary.mjs"
+  },
+  "files": [
+    "lib",
+    "bin",
+    "client",
+    "plugins",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs plugins/dsh-affinity/test/*.test.mjs",
+    "test:affinity": "node --test plugins/dsh-affinity/test/judge.test.mjs",
+    "test:diary": "node --test test/plugin.test.mjs test/diary.test.mjs test/affinity-reader.test.mjs",
+    "test:autowrite": "node --test test/autowrite.test.mjs"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "diary",
+    "memory",
+    "affinity",
+    "cordis"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AsterLuo/dsh-cat-diary.git"
+  },
+  "homepage": "https://github.com/AsterLuo/dsh-cat-diary#readme",
+  "bugs": {
+    "url": "https://github.com/AsterLuo/dsh-cat-diary/issues"
+  },
+  "author": "AsterLuo"
+}

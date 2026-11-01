@@ -1,0 +1,46 @@
+{
+  "name": "dsh-affinity",
+  "version": "1.0.0",
+  "description": "好感度的唯一写入方：每轮由模型自己判断该加分还是扣分，单次 ±2、每日绝对值累计 ±10，跨会话连续不重置。其他插件只读。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./ledger": "./lib/ledger.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/ledger.test.mjs"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "affinity",
+    "cordis"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AsterLuo/dsh-cat-diary.git"
+  }
+}

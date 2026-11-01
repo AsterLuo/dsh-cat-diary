@@ -1,0 +1,10 @@
+# dsh-cat-diary bundle patch: inserts the host half into a profile's layer stack.
+#
+# Everything is opt-in through configuration; the defaults keep the plugin quiet
+# (no diary is generated until the CLI or a timer asks for one).
+- insert:
+    - id: cat-diary
+      name: 'dsh-cat-diary'
+      config:
+        briefBytes: 3000
+        cutoffHour: 5

@@ -1,0 +1,9 @@
+# dsh-affinity bundle patch: inserts the host half into a profile's layer stack.
+# The score lives in <DSH_HOME>/storages/dsh-affinity/<persona>/ and outlives the plugin.
+- insert:
+    - id: affinity
+      name: 'dsh-affinity'
+      config:
+        maxStep: 2
+        maxDaily: 10
+        cutoffHour: 5

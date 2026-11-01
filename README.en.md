@@ -94,6 +94,39 @@ Catch-up is idempotent: the decision is based on whether `days/<day>.md` exists 
 not on in-memory state, so any number of restarts writes it only once. Existing diaries are
 **never touched**—you may have edited them by hand.
 
+## Works without a sidebar
+
+The sidebar panel is an **optional enhancement**, not a requirement.
+
+Panel registration uses a soft wait: if the host provides `sidebarRightTabs` and `sidebarRight`, the panel mounts; if not, it is skipped silently. **Nothing throws, and startup is never affected.** Everything below keeps working without a panel:
+
+| Feature | Without a sidebar |
+| --- | --- |
+| Automatic diary generation (catch-up at startup) | ✅ works |
+| Per-turn affinity judgement | ✅ works |
+| Yesterday's brief injected into context | ✅ works |
+| All CLI commands | ✅ works |
+| Visual panel | ❌ absent |
+
+**The core value is not the panel—it is that a new session automatically remembers yesterday.** The panel only saves you from typing commands.
+
+### Use the CLI instead of the panel
+
+```bash
+node bin/diary.mjs status         # current score, diary count, today's state
+node bin/diary.mjs open           # yesterday's brief
+node bin/diary.mjs show --date D  # full diary for one day
+node bin/diary.mjs list           # list all diaries
+node bin/diary.mjs affinity show  # affinity ledger (read-only)
+```
+
+### Common cases
+
+- **TUI / pure CLI hosts**: the client half targets the web frontend (`platform: web`), so such hosts have no rendering layer and the panel is simply never loaded. The **backend of the diary and the affinity score still runs**.
+- **Web UI with the right sidebar disabled**: the panel will not appear; everything else is unaffected.
+
+If you want the read-only routes to stay unregistered as well (nothing consumes them without a panel), you can disable the client half in the profile config—but it is usually unnecessary: those two routes are read-only, local-only, and expose at most the last 7 days of diaries.
+
 ## CLI
 
 ```bash

@@ -9,6 +9,13 @@ change, and the last 7 days of diaries.
 
 [中文文档](README.md)
 
+
+![Sidebar panel](docs/panel.png)
+
+Ten affinity states, 20 points each (example scores shown):
+
+![Ten states](docs/states.png)
+
 ## What it does
 
 | Module | Responsibility |

@@ -453,7 +453,7 @@ window.__ModuleLoader__.load({
       { min: 40, label: '檐下初逢', hint: '开始盼着你来了', glyph: '🍃', tone: 'warm', motion: 'sway', tint: '#4ecdc4' },
       { min: 20, label: '渐生默契', hint: '话不用说完也能懂', glyph: '🫧', tone: 'mild', motion: 'float', tint: '#5b8def' },
       { min: 10, label: '偶然相望', hint: '偶尔会多看两眼', glyph: '✨', tone: 'mild', motion: 'twinkle', tint: '#7c8cff' },
-      { min: -9, label: '不相熟', hint: '还在互相打量', glyph: '🌫️', tone: 'neutral', motion: 'drift', tint: '#8d93a1' },
+      { min: -9, label: '不相熟', hint: '还在互相打量', glyph: '🌸', tone: 'neutral', motion: 'drift', tint: '#8d93a1' },
       { min: -29, label: '隔了层雾', hint: '有些话没再说出口', glyph: '☁️', tone: 'cool', motion: 'drift', tint: '#77839b' },
       { min: -49, label: '话少了', hint: '回话越来越短', glyph: '🌧️', tone: 'cool', motion: 'drip', tint: '#5f7089' },
       { min: -69, label: '避着走', hint: '刻意绕开彼此', glyph: '❄️', tone: 'cold', motion: 'pulse', tint: '#6b7f9e' },

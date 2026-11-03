@@ -26,6 +26,7 @@ import {
 } from './ledger.js'
 
 import { runJudge } from './judge.js'
+import { readJudgeChoice } from './judge-route.js'
 import { createDiagnostics } from './diagnostics.js'
 import { registerRoutes } from './route.js'
 
@@ -61,7 +62,10 @@ export function resolveDataRoot (options = {}) {
     ? path.resolve(options.dshHome)
     : (env?.DSH_HOME && env.DSH_HOME.trim() !== "" ? path.resolve(env.DSH_HOME) : path.join(os.homedir(), ".dsh"))
   const person = options.person ?? (env?.DSH_AFFINITY_PERSONA?.trim() || "default")
-  return { dshHome: home, dataRoot: path.join(home, "storages", STORAGE_NAME, person) }
+  // person 必须一起回传：下面既要算账本目录，又要去 cat-diary 的同一人格目录
+  // 读判分模型选择。少这一个字段，两处就会各自写一遍 `?? "default"`，
+  // 而「同一个事实有两个来源」正是这次查了一整晚的那类 bug。
+  return { dshHome: home, person, dataRoot: path.join(home, "storages", STORAGE_NAME, person) }
 }
 
 /**
@@ -73,8 +77,11 @@ export function toolDescription (limits) {
   return [
     "对当前这一轮主人说的话做一次好感度判定（加分 / 扣分 / 不变）。",
     "宿主已经会在每轮开始时自动判一次；你只在本轮缺少判定时才需要调用，重复调用会返回同一结果不会重复计分。",
-    "规则：delta 只能是 -2/-1/0/+1/+2；单日所有变化按绝对值累计不超过 " + limits.maxDaily + "。",
-    "普通技术问题、指出 bug、提出反对意见、要求返工——都是正常协作，判 0。",
+    "规则：delta 是 -" + limits.maxStep + " 到 +" + limits.maxStep + " 之间的整数；单日所有变化按绝对值累计不超过 " + limits.maxDaily + "。",
+    "档位按强度给：+1 轻微正向、+2 明显正向，更大的档位只留给罕见的高强度事件——到了就给，不要为了保守压低。",
+    "普通技术问题、指出 bug、提出反对意见、要求返工——都不是冒犯，不扣分。",
+    "+1 适用于：被认真对待、被记住、认真授权你做事、给出关键约束或边界要求、认可你的工作成果、关心你的状态或成长。",
+    "0 只用于纯信息交换、语气完全中性、或确实无法判断；不要把它当默认值。",
     "reason 写具体原因（主人做了什么），不要写「开心」这种空话。"
   ].join("\n")
 }
@@ -84,14 +91,26 @@ export function toolDescription (limits) {
  * @param {{maxStep: number}} limits - 上限。
  * @returns {object} schema。
  */
+/**
+ * 由上限生成枚举值。-0 不存在，所以从 -cap 递增到 +cap。
+ * @param {number} maxStep - 单次上限。
+ * @returns {number[]} 枚举数组。
+ */
+function rangeArray (maxStep) {
+  const cap = Math.abs(Number(maxStep) || 2)
+  const out = []
+  for (let v = -cap; v <= cap; v += 1) out.push(v)
+  return out
+}
+
 export function toolParameters (limits) {
   return {
     type: "object",
     properties: {
       delta: {
         type: "integer",
-        enum: [-2, -1, 0, 1, 2],
-        description: "本轮好感度变化量，只能是 -2/-1/0/+1/+2"
+        enum: rangeArray(limits.maxStep),
+        description: "本轮好感度变化量，范围 -" + limits.maxStep + " ~ +" + limits.maxStep
       },
       reason: {
         type: "string",
@@ -142,10 +161,12 @@ export function apply (ctx, config = {}) {
 
   let dataRoot
   let dshHome
+  let person
   try {
     const resolved = resolveDataRoot({ dshHome: config.dshHome, person: config.person });
     dataRoot = resolved.dataRoot
     dshHome = resolved.dshHome
+    person = resolved.person
   } catch (error) {
     ctx?.logger?.warn?.(`[affinity] disabled: cannot resolve data root — ${error?.message ?? error}`)
     return
@@ -171,6 +192,9 @@ export function apply (ctx, config = {}) {
   diag.mark("apply", {
     dshHome,
     dataRoot,
+    // person 记进诊断：判分模型选择是按人格目录读的，人格错了就会静默
+    // 退回"跟随会话"，而那个现象和"没设置过"一模一样。
+    person,
     maxStep,
     maxDaily,
     cutoffHour,
@@ -261,10 +285,26 @@ export function apply (ctx, config = {}) {
                     /* 读不到请求头就保持 undefined，下面会记失败 */
                   }
                 }
-                diag.mark("judge-route", { provider: provider ?? null, model: model ?? null })
+                // 主人在面板上为「判分」单独选过模型时，**它优先于会话路由**。
+                //
+                // 为什么优先级要高于会话：会话路由是这轮对话本身用的模型，
+                // 判分是一个独立的后台任务，两者的诉求不同（判分要快、要稳、
+                // 要便宜）。而会话模型一旦指向没有 adapter 的渠道（buddy 那个
+                // NO_ADAPTER），判分就会跟着一起静默停摆——那是实测踩过的坑。
+                let source = provider && model ? "session" : "none"
+                let reasoningEffort
+                const chosen = readJudgeChoice(dshHome, person)
+                if (chosen !== null) {
+                  provider = chosen.provider
+                  model = chosen.model
+                  reasoningEffort = chosen.reasoningEffort
+                  source = "stored"
+                }
+                diag.mark("judge-route", { provider: provider ?? null, model: model ?? null, source, reasoningEffort: reasoningEffort ?? null })
                 const verdict = await runJudge(ctx, {
                   provider,
                   model,
+                  reasoningEffort,
                   userText: user.text,
                   score: state.score,
                   used: day.used,
@@ -276,8 +316,11 @@ export function apply (ctx, config = {}) {
                   ok: verdict.ok,
                   delta: verdict.delta ?? null,
                   error: verdict.error ?? null,
-                  provider: agentOptions.provider ?? null,
-                  model: agentOptions.model ?? null
+                  // 记**实际用的**路由，不是会话的：这两者现在可能不同，
+                  // 记错了下次排障就会去查一个根本不是它用的模型。
+                  provider: provider ?? null,
+                  model: model ?? null,
+                  source
                 })
                 if (verdict.ok) {
                   const written = commit({
@@ -394,9 +437,15 @@ export function apply (ctx, config = {}) {
     ctx?.systemPrompt?.context?.({
       name: "affinity-status",
       order: Number.isFinite(order) ? order : 135,
+      // 每次组装都实时回读账本，不用 30 秒缓存——缓存会让注入行滞后于账本，
+      // 模型照着旧数字说话就变成"手写值与账本不符"。读失败时才退回上次的缓存。
       text: () => {
-        if (!cache.line) return "";
-        return `${cache.line}；单次上限 ±${maxStep}。`;
+        const line = refresh() || cache.line;
+        if (!line) return "";
+        return [
+          `${line}；单次上限 ±${maxStep}。`,
+          "⚠️ 好感度数值的唯一来源是本行（由账本实时渲染）。禁止在回复里手写、推测、估算或自行累加好感度数值，也不要在回复末尾自行追加「好感度：X → Y」这类文本——那会与账本不一致。需要展示当前好感度时，原样引用本行的数字。"
+        ].join("\n");
       }
     });
   } catch (error) {

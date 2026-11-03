@@ -12,7 +12,7 @@ import {
 import { parseJudgeReply, judgeUserPrompt, judgeSystemPrompt, runJudge } from '../lib/judge.js'
 import { buildOverview, lastDays, recentChanges, dailySeries } from '../lib/stats.js'
 import { readableDays, DIARY_WINDOW_DAYS } from '../lib/route.js'
-import { pickUserMessage, toolParameters } from '../lib/index.js'
+import { pickUserMessage, toolParameters, toolDescription } from '../lib/index.js'
 
 /** 每个测试独立的临时人格根。 */
 function root () {
@@ -52,9 +52,9 @@ test('判定为 0 也留下 judge 记录，且不进变化曲线', () => {
   assert.equal(state.score, INITIAL_SCORE);
 });
 
-test('单次超过 ±2 被拒绝，且不改分', () => {
+test('单次超过 ±4（默认上限）被拒绝，且不改分', () => {
   const data = root();
-  const outcome = judge(data, { turnKey: 's1:1', requestedDelta: 3, reason: 'x', at: NOON, day: DAY });
+  const outcome = judge(data, { turnKey: 's1:1', requestedDelta: 5, reason: 'x', at: NOON, day: DAY });
   assert.equal(outcome.ok, false);
   assert.equal(outcome.code, 'step-too-large');
   assert.equal(readLedger(data).score, INITIAL_SCORE);
@@ -68,35 +68,35 @@ test('小数与非整数被拒绝', () => {
 
 test('日额度按绝对值累计，且超额时截断而不是丢弃', () => {
   const data = root();
-  for (let index = 0; index < 5; index += 1) {
-    const outcome = judge(data, { turnKey: 'k' + index, requestedDelta: 2, reason: 'r', at: NOON, day: DAY });
+  // 默认日额度 16：4×4 = 16 正好用尽。
+  for (let index = 0; index < 4; index += 1) {
+    const outcome = judge(data, { turnKey: 'k' + index, requestedDelta: 4, reason: 'r', at: NOON, day: DAY });
     assert.equal(outcome.ok, true, '第 ' + (index + 1) + ' 次应被接受');
   }
-  const overflow = judge(data, { turnKey: 'k5', requestedDelta: 2, reason: 'r', at: NOON, day: DAY });
+  const overflow = judge(data, { turnKey: 'k5', requestedDelta: 4, reason: 'r', at: NOON, day: DAY });
   assert.equal(overflow.appliedDelta, 0, '额度用尽后实际变化为 0');
   assert.equal(overflow.limitReason, 'daily-cap');
-  assert.equal(readLedger(data).score, INITIAL_SCORE + 10);
+  assert.equal(readLedger(data).score, INITIAL_SCORE + 16);
 });
 
 test('额度只剩 1 点时 +2 截断为 +1 并注明', () => {
   const data = root();
-  // 4×2 + 1×1 = 9，正好剩下 1 点额度，此时再 +2 应当被截断成 +1。
-  judge(data, { turnKey: 'a', requestedDelta: 2, reason: 'r', at: NOON, day: DAY });
-  judge(data, { turnKey: 'b', requestedDelta: 2, reason: 'r', at: NOON, day: DAY });
-  judge(data, { turnKey: 'c', requestedDelta: 2, reason: 'r', at: NOON, day: DAY });
-  judge(data, { turnKey: 'd', requestedDelta: 2, reason: 'r', at: NOON, day: DAY });
-  judge(data, { turnKey: 'e', requestedDelta: 1, reason: 'r', at: NOON, day: DAY });
-  const outcome = judge(data, { turnKey: 'f', requestedDelta: 2, reason: 'r', at: NOON, day: DAY });
+  // 4×3 + 1×3 = 15，剩 1 点额度，此时再 +4 应当被截断成 +1。
+  judge(data, { turnKey: 'a', requestedDelta: 4, reason: 'r', at: NOON, day: DAY });
+  judge(data, { turnKey: 'b', requestedDelta: 4, reason: 'r', at: NOON, day: DAY });
+  judge(data, { turnKey: 'c', requestedDelta: 4, reason: 'r', at: NOON, day: DAY });
+  judge(data, { turnKey: 'd', requestedDelta: 3, reason: 'r', at: NOON, day: DAY });
+  const outcome = judge(data, { turnKey: 'f', requestedDelta: 4, reason: 'r', at: NOON, day: DAY });
   assert.equal(outcome.appliedDelta, 1, '只剩 1 点额度');
   assert.equal(outcome.limitReason, 'daily-cap-truncated');
 });
 
 test('正负混合同样消耗额度，不能被洗掉', () => {
   const data = root();
-  const seq = [2, -2, 2, -2, 2, -2];
+  const seq = [4, -4, 4, -4, 4, -4];
   const results = seq.map((delta, index) => judge(data, { turnKey: 'm' + index, requestedDelta: delta, reason: 'r', at: NOON, day: DAY }));
   const used = results.reduce((sum, item) => sum + Math.abs(item.appliedDelta ?? 0), 0);
-  assert(used <= 10, '绝对值累计不得超过 10，实际 ' + used);
+  assert(used <= 16, '绝对值累计不得超过 16，实际 ' + used);
 });
 
 test('达到上限后不再越界', () => {
@@ -137,7 +137,7 @@ test('跨 05:00 换日后额度重新计算', () => {
   const b = judge(data, { turnKey: 'x2', requestedDelta: 2, reason: 'r', at: afterCutoff });
   assert.equal(a.usedToday, 2);
   assert.equal(b.usedToday, 2, '新的一天重新计额度');
-  assert.equal(b.remaining, 8);
+  assert.equal(b.remaining, 14, '新的一天额度重置为 16，已用 2，剩 14');
 });
 
 test('锁被占用时释放后仍可写入', () => {
@@ -197,6 +197,33 @@ test('裁判提示词包含反向约束', () => {
   assert(prompt.includes('要求返工'), '必须说明返工不算冒犯');
   assert(prompt.includes('加满'), '必须说明命令不构成感情');
   assert(judgeUserPrompt({ userText: '你好', score: 70, used: 0, maxDaily: 10 }).includes('70'));
+});
+
+test('裁判提示词不得把 0 写成默认答案（A 方案回归）', () => {
+  const prompt = judgeSystemPrompt({ maxStep: 2 });
+  assert(!prompt.includes('这是最常见的答案'), '不得再用「这是最常见的答案」诱导判 0');
+  assert(prompt.includes('不要把 0 当作默认值'), '必须显式禁止把 0 当默认值');
+});
+
+test('裁判提示词必须把技术协作中的正向信号纳入 +1（B 方案回归）', () => {
+  const prompt = judgeSystemPrompt({ maxStep: 2 });
+  assert(prompt.includes('认真授权'), '+1 必须覆盖「认真授权猫娘做事」');
+  assert(prompt.includes('关键约束') || prompt.includes('边界要求'), '+1 必须覆盖「给出关键约束/边界要求」');
+  assert(prompt.includes('认可猫娘的工作成果'), '+1 必须覆盖「认可工作成果」');
+  assert(prompt.includes('关心猫娘的状态或成长'), '+1 必须覆盖「关心状态或成长」');
+});
+
+test('指出 bug 本身不扣分，但带正向信号时应判 +1 而不是 0', () => {
+  const prompt = judgeSystemPrompt({ maxStep: 2 });
+  assert(prompt.includes('不是冒犯'), '必须保留「指出 bug 不是冒犯」的反向约束');
+  assert(prompt.includes('纯技术批评且无正向信号时才判 0'), '必须区分「纯批评」与「批评+正向信号」');
+});
+
+test('工具描述同样不得把 0 当默认值', () => {
+  const description = toolDescription({ maxStep: 2, maxDaily: 10 });
+  assert(!description.includes('都是正常协作，判 0'), '工具描述不得再一刀切判 0');
+  assert(description.includes('不要把它当默认值'), '工具描述必须显式禁止 0 当默认值');
+  assert(description.includes('认真授权你做事'), '工具描述必须同步 B 方案的正向信号');
 });
 
 test('只有真实用户消息才判分，系统注入被跳过', () => {

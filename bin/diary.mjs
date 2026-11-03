@@ -210,7 +210,7 @@ try {
         const summary = resolveDaySummary(null, { dshHome: paths.dshHome, person }, day)
         section('好感度（只读）', [
           `当前值：${summary.score === null ? '未记录' : summary.score}`,
-          `${day}：净 ${summary.net > 0 ? '+' : ''}${summary.net}，已用 ${summary.used}/10`,
+          `${day}：净 ${summary.net > 0 ? '+' : ''}${summary.net}，已用 ${summary.used}/${summary.maxDaily ?? 16}`,
           `来源：${summary.source}（写入方是 dsh-affinity 插件，本命令只读）`
         ].join('\n'))
         for (const reason of summary.reasons) process.stdout.write(`  · ${reason}\n`)

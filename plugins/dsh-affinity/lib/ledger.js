@@ -28,11 +28,20 @@ export const MAX_SCORE = 100
 /** 全新关系的初始分，只写一次，之后永不重新推导。 */
 export const INITIAL_SCORE = 50
 
-/** 单次最大调整量（任一方向）。 */
-export const DEFAULT_MAX_STEP = 2
+/**
+ * 单次最大调整量（任一方向）。
+ * 2026-11-02 由 2 放宽到 4：主人反馈「太保守」——一轮强正向事件（认真托付、长期投入）
+ * 用 +2 表达不出来，导致高分段的差异被抹平。日额度仍然按绝对值累计兜底，
+ * 所以放宽单步不会放大总量，只是让强度分级更细。
+ */
+export const DEFAULT_MAX_STEP = 4
 
-/** 每个日记日的最大移动总量，按绝对值求和。 */
-export const DEFAULT_MAX_DAILY = 10
+/**
+ * 每个日记日的最大移动总量，按绝对值求和。
+ * 2026-11-02 由 10 放宽到 16：单步上限提到 4 之后，10 会让「三次强事件」就撞天花板，
+ * 剩下的轮次全部被截断成 0，看上去像裁判变木了。提高到 16 是与 maxStep 4 配套的比值。
+ */
+export const DEFAULT_MAX_DAILY = 16
 
 /** 日记日切换小时；与日记插件保持一致。 */
 export const DEFAULT_CUTOFF_HOUR = 5

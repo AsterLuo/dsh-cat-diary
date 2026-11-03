@@ -7,3 +7,7 @@ Thumbs.db
 *.tmp
 .DSH_HOME/
 test-output/
+
+# 本地备份目录（排障时留下的一次性副本，不进仓库）
+_affinity-backup-*/
+plugins/_affinity-bak-*/

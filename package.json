@@ -38,7 +38,10 @@
     "test": "node --test test/*.test.mjs plugins/dsh-affinity/test/*.test.mjs",
     "test:affinity": "node --test plugins/dsh-affinity/test/judge.test.mjs",
     "test:diary": "node --test test/plugin.test.mjs test/diary.test.mjs test/affinity-reader.test.mjs",
-    "test:autowrite": "node --test test/autowrite.test.mjs"
+    "test:autowrite": "node --test test/autowrite.test.mjs",
+    "test:model-picker": "node --test test/model-picker.test.mjs test/model-route.integration.mjs test/auto-write-route.test.mjs test/client-picker.test.mjs test/client-render.test.mjs test/apply-picker.test.mjs test/failure-mark.test.mjs",
+    "test:persona": "node --test test/persona.test.mjs test/affinity-validate.test.mjs",
+    "test:purpose": "node --test test/model-purpose.test.mjs test/judge-route.test.mjs plugins/dsh-affinity/test/judge-apply.test.mjs"
   },
   "keywords": [
     "deepseek",

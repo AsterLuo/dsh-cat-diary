@@ -21,7 +21,7 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "scripts": {
-    "test": "node --test test/ledger.test.mjs"
+    "test": "node --test test/*.test.mjs"
   },
   "keywords": [
     "deepseek",

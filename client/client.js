@@ -29,6 +29,8 @@ window.__ModuleLoader__.load({
     const OVERVIEW_ROUTE = '/dsh-cat-diary/affinity/overview'
     /** 日记正文路由。 */
     const DIARY_ROUTE = '/dsh-cat-diary/diary/day'
+    /** 模型选择路由（必须与 lib/model-route.js 的 MODEL_ROUTE 一致）。一条路由两个用途，用 ?purpose= 区分。 */
+    const MODEL_ROUTE = '/dsh-cat-diary/diary/model'
 
     /** 只打一次样式表；重复注入会让样式表数量无限增长。 */
     let stylesInstalled = false
@@ -43,7 +45,26 @@ window.__ModuleLoader__.load({
         /* ================= 骨架 ================= */
         .cd-panel {
           display: flex; flex-direction: column; height: 100%; min-height: 0;
+          /* 弹窗用 absolute 盖在面板内：宿主的侧边栏祖先里可能有
+             backdrop-filter / transform，那会给 position: fixed 造一个新的
+             containing block，弹窗就会跑到莫名其妙的位置。absolute + 这里的
+             relative 是唯一不受祖先影响的组合。 */
+          position: relative;
           font-size: 13px; color: var(--dsw-alias-label-primary, inherit);
+          /* 两个派生变量，派生自 label-primary 而不是写死颜色。
+             label-primary 在浅色主题下是近黑、深色主题下是近白，所以
+             「按百分比混进去」得到的微妙底色会自动跟着主题翻转。
+             写死 rgba(255,255,255,.04) 的后果是浅色下完全看不见——
+             这不是审美问题，是那个填充直接消失了。 */
+          --cd-fill: color-mix(in srgb, var(--dsw-alias-label-primary, #888) 3.5%, transparent);
+          --cd-fill-strong: color-mix(in srgb, var(--dsw-alias-label-primary, #888) 7%, transparent);
+          --cd-line: var(--dsw-alias-border-l2, #8882);
+          /* 强调色单独派生。
+             --dsw-alias-brand-primary 在 DSH 里是「近黑（浅色）/ 近白（深色）」，
+             它适合做按钮前景，不适合当进度条与曲线填充——直接用会得到一条
+             灰黑条，在浅色主题下尤其像"没上色"。business-primary 才是真正
+             带色彩的语义色，取不到时退回 brand-primary，再不行才用固定蓝。 */
+          --cd-accent: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary, #4d93f8));
         }
         .cd-scroll { overflow: auto; padding: 0 0 22px; flex: 1 1 auto; min-height: 0; }
         .cd-scroll::-webkit-scrollbar { width: 8px; }
@@ -58,13 +79,148 @@ window.__ModuleLoader__.load({
         }
         .cd-title { font-weight: 650; font-size: 13.5px; flex: 1 1 auto; letter-spacing: 0.01em; }
         .cd-btn {
-          border: 1px solid var(--dsw-alias-border-secondary, #8884);
+          border: 1px solid var(--cd-line);
           background: transparent; color: var(--dsw-alias-label-secondary, inherit);
           border-radius: 8px; padding: 3px 10px; cursor: pointer;
           font-size: 11.5px; line-height: 1.6; transition: background .15s ease, color .15s ease;
         }
         .cd-btn:hover { background: var(--dsw-alias-interactive-bg-hover, #8881); color: var(--dsw-alias-label-primary, inherit); }
         .cd-btn[data-busy="1"] { opacity: .55; cursor: default; }
+
+        /* 图标按钮：只放一个 SVG，不带文字，尺寸和 .cd-btn 同一档高度 */
+        .cd-icon-btn {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 26px; height: 26px; padding: 0; flex: 0 0 auto;
+          border: 1px solid var(--cd-line);
+          background: transparent; color: var(--dsw-alias-label-secondary, inherit);
+          border-radius: 8px; cursor: pointer;
+          transition: background .15s ease, color .15s ease, transform .2s ease;
+        }
+        .cd-icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover, #8881); color: var(--dsw-alias-label-primary, inherit); }
+        .cd-icon-btn:active { transform: scale(.94); }
+        .cd-icon-btn svg { width: 14px; height: 14px; display: block; }
+        .cd-icon-btn[data-busy="1"] { opacity: .55; cursor: default; }
+        .cd-icon-btn[data-busy="1"] svg { animation: cdSpin .9s linear infinite; }
+        @keyframes cdSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* ================= 模型选择弹窗 ================= */
+        .cd-mask {
+          position: absolute; inset: 0; z-index: 60;
+          display: flex; align-items: center; justify-content: center;
+          padding: 14px;
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #17181c) 62%, transparent);
+          backdrop-filter: blur(2px);
+        }
+        .cd-modal {
+          display: flex; flex-direction: column;
+          /* 高度跟着面板走，不用 vh：侧边栏可能只有半个屏幕高，用视口单位
+             会让弹窗比面板还高，底部按钮被裁掉。 */
+          width: 100%; max-width: 380px; max-height: 100%;
+          border-radius: 16px; overflow: hidden;
+          background: var(--dsw-alias-bg-layer-2, #23252b);
+          border: 1px solid var(--cd-line);
+          box-shadow: 0 24px 60px -24px rgba(0,0,0,.8);
+          color: var(--dsw-alias-label-primary, inherit);
+        }
+        .cd-modal-head {
+          display: flex; align-items: center; gap: 8px;
+          padding: 13px 14px 10px; flex: 0 0 auto;
+        }
+        .cd-modal-title { font-size: 13px; font-weight: 650; flex: 1 1 auto; }
+        .cd-modal-sub { font-size: 10.5px; opacity: .5; margin-top: 2px; }
+        .cd-modal-x {
+          border: 0; background: transparent; color: var(--dsw-alias-label-tertiary, inherit);
+          cursor: pointer; width: 22px; height: 22px; border-radius: 6px;
+          display: inline-flex; align-items: center; justify-content: center;
+        }
+        .cd-modal-x:hover { background: var(--dsw-alias-interactive-bg-hover, #8882); color: var(--dsw-alias-label-primary, inherit); }
+        .cd-modal-x svg { width: 12px; height: 12px; }
+        .cd-modal-current {
+          margin: 0 14px 10px; padding: 8px 10px; border-radius: 10px;
+          background: var(--cd-fill);
+          border: 1px solid var(--cd-line);
+          font-size: 11px; line-height: 1.6; flex: 0 0 auto;
+        }
+        .cd-modal-current b { font-weight: 650; }
+        /* 用途页签：跟分段控件同一套观感，但更紧凑——弹窗里空间宝贵 */
+        .cd-tabs {
+          display: flex; gap: 2px; margin: 0 14px 10px; padding: 3px;
+          border-radius: 10px; flex: 0 0 auto;
+          background: var(--dsw-alias-bg-layer-3, #8881);
+          border: 1px solid var(--dsw-alias-border-l2, #8882);
+        }
+        .cd-tab {
+          flex: 1 1 0; border: 0; background: transparent; cursor: pointer;
+          color: var(--dsw-alias-label-secondary, inherit);
+          border-radius: 7px; padding: 4px 10px; font-size: 11.5px;
+          transition: background .15s ease, color .15s ease;
+          white-space: nowrap;
+        }
+        .cd-tab:hover { color: var(--dsw-alias-label-primary, inherit); }
+        .cd-tab[data-on="1"] {
+          background: var(--dsw-alias-interactive-bg-active, #8882);
+          color: var(--dsw-alias-label-primary, inherit);
+          font-weight: 600;
+        }
+        .cd-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 10px 8px; }
+        .cd-modal-body::-webkit-scrollbar { width: 8px; }
+        .cd-modal-body::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2, #8883); border-radius: 4px; }
+        .cd-group-label {
+          display: flex; align-items: center; gap: 6px;
+          padding: 9px 4px 5px; font-size: 10.5px; font-weight: 600;
+          letter-spacing: .04em; text-transform: none;
+          color: var(--dsw-alias-label-tertiary, inherit); opacity: .75;
+        }
+        .cd-group-label::after {
+          content: ''; flex: 1 1 auto; height: 1px;
+          background: var(--dsw-alias-border-l2, #8882);
+        }
+        .cd-model {
+          display: flex; flex-direction: column; gap: 3px;
+          width: 100%; text-align: left; cursor: pointer;
+          border: 1px solid transparent; border-radius: 9px;
+          background: transparent; color: inherit;
+          padding: 7px 9px; font-size: 12px; line-height: 1.45;
+          transition: background .12s ease;
+        }
+        .cd-model:hover { background: var(--dsw-alias-interactive-bg-hover, #8881); }
+        .cd-model[data-on="1"] {
+          background: var(--dsw-alias-interactive-bg-active, #8882);
+          border-color: var(--cd-accent);
+        }
+        .cd-model-name { display: flex; align-items: center; gap: 6px; font-weight: 550; }
+        .cd-model-id { font-size: 10px; opacity: .45; font-family: ui-monospace, monospace; word-break: break-all; }
+        .cd-model-fail { color: var(--dsw-alias-state-warn-primary, #d4544f); font-size: 11px; padding: 6px 9px; line-height: 1.55; }
+        .cd-efforts { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 9px 8px; }
+        .cd-effort {
+          border: 1px solid var(--cd-line);
+          background: transparent; color: var(--dsw-alias-label-secondary, inherit);
+          border-radius: 999px; padding: 1px 8px; font-size: 10px; cursor: pointer;
+        }
+        .cd-effort[data-on="1"] {
+          background: var(--cd-accent);
+          border-color: transparent; color: #fff; font-weight: 600;
+        }
+        .cd-modal-foot {
+          display: flex; align-items: center; gap: 8px;
+          padding: 10px 14px 13px; flex: 0 0 auto;
+          border-top: 1px solid var(--dsw-alias-border-l2, #8882);
+        }
+        .cd-modal-msg { flex: 1 1 auto; font-size: 10.5px; line-height: 1.5; color: var(--dsw-alias-label-tertiary, inherit); word-break: break-word; }
+        .cd-modal-msg[data-tone="bad"] { color: var(--dsw-alias-state-warn-primary, #d4544f); }
+        .cd-modal-btn {
+          border: 1px solid var(--cd-line);
+          background: transparent; color: var(--dsw-alias-label-secondary, inherit);
+          border-radius: 8px; padding: 4px 12px; font-size: 11.5px; cursor: pointer;
+        }
+        .cd-modal-btn:hover { background: var(--dsw-alias-interactive-bg-hover, #8881); color: var(--dsw-alias-label-primary, inherit); }
+        .cd-modal-btn.primary {
+          background: var(--cd-accent);
+          border-color: transparent; color: #fff; font-weight: 600;
+        }
+        .cd-modal-btn.primary[data-disabled="1"] { opacity: .5; cursor: default; }
+        .cd-modal-btn.ghost { border-color: transparent; opacity: .7; padding: 4px 6px; }
         
         /* ================= 主视觉卡片 ================= */
         .cd-hero {
@@ -77,7 +233,7 @@ window.__ModuleLoader__.load({
         .cd-hero::before {
           content: ""; position: absolute; inset: 0;
           background: radial-gradient(120% 140% at 8% 0%,
-            var(--dsw-alias-brand-primary, #5b8def) 0%, transparent 58%);
+            var(--cd-accent) 0%, transparent 58%);
           opacity: .13; pointer-events: none;
         }
         .cd-hero-top { display: flex; align-items: flex-end; gap: 10px; position: relative; }
@@ -96,8 +252,8 @@ window.__ModuleLoader__.load({
           display: flex; align-items: center; gap: 11px;
           margin-top: 15px; padding: 9px 12px 9px 10px;
           border-radius: 12px; position: relative;
-          background: var(--dsw-alias-bg-layer-4, rgba(255,255,255,.04));
-          border: 1px solid var(--dsw-alias-border-l2, rgba(255,255,255,.08));
+          background: var(--cd-fill);
+          border: 1px solid var(--cd-line);
         }
         .cd-stage::before {
           content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
@@ -136,7 +292,7 @@ window.__ModuleLoader__.load({
         .cd-usage-wrap { margin-top: 15px; position: relative; }
         .cd-usage-head { display: flex; justify-content: space-between; font-size: 10.5px; opacity: .55; margin-bottom: 6px; }
         .cd-usage { height: 6px; border-radius: 999px; overflow: hidden; background: var(--dsw-alias-border-l2, #8883); }
-        .cd-usage > i { display: block; height: 100%; border-radius: 999px; background: var(--dsw-alias-brand-primary, #5b8def); opacity: .85; transition: width .4s cubic-bezier(.4,0,.2,1); }
+        .cd-usage > i { display: block; height: 100%; border-radius: 999px; background: var(--cd-accent); opacity: .85; transition: width .4s cubic-bezier(.4,0,.2,1); }
         
         /* ================= 分段控件 ================= */
         .cd-seg {
@@ -167,7 +323,7 @@ window.__ModuleLoader__.load({
         }
         .cd-card-title::before {
           content: ""; width: 3px; height: 11px; border-radius: 2px;
-          background: var(--dsw-alias-brand-primary, #5b8def); flex: 0 0 auto;
+          background: var(--cd-accent); flex: 0 0 auto;
         }
         .cd-card-extra { margin-left: auto; font-size: 10.5px; opacity: .45; font-weight: 400; letter-spacing: 0; }
         
@@ -203,27 +359,27 @@ window.__ModuleLoader__.load({
           font-size: 9px; font-family: inherit;
           opacity: .8; letter-spacing: .02em;
         }
-        .cd-grad-top { stop-color: var(--dsw-alias-brand-primary, #5b8def); stop-opacity: .38; }
-        .cd-grad-bottom { stop-color: var(--dsw-alias-brand-primary, #5b8def); stop-opacity: .02; }
+        .cd-grad-top { stop-color: var(--cd-accent); stop-opacity: .38; }
+        .cd-grad-bottom { stop-color: var(--cd-accent); stop-opacity: .02; }
         .cd-line {
-          fill: none; stroke: var(--dsw-alias-brand-primary, #5b8def);
+          fill: none; stroke: var(--cd-accent);
           stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round;
           vector-effect: non-scaling-stroke;
         }
         .cd-dot {
           fill: var(--dsw-alias-bg-layer-3, #fff);
-          stroke: var(--dsw-alias-brand-primary, #5b8def);
+          stroke: var(--cd-accent);
           stroke-width: 2; vector-effect: non-scaling-stroke;
         }
-        .cd-dot[data-hover="1"] { fill: var(--dsw-alias-brand-primary, #5b8def); stroke: var(--dsw-alias-bg-layer-3, #fff); }
-        .cd-dot-halo { fill: var(--dsw-alias-brand-primary, #5b8def); opacity: .18; }
+        .cd-dot[data-hover="1"] { fill: var(--cd-accent); stroke: var(--dsw-alias-bg-layer-3, #fff); }
+        .cd-dot-halo { fill: var(--cd-accent); opacity: .18; }
         .cd-cursor-line {
           stroke: var(--dsw-alias-label-tertiary, currentColor);
           stroke-width: 1; stroke-dasharray: 3 3; opacity: .5;
           vector-effect: non-scaling-stroke;
         }
         .cd-tooltip-bg {
-          fill: var(--dsw-alias-bg-layer-4, #1e1e22);
+          fill: var(--dsw-alias-bg-layer-1, #1e1e22);
           stroke: var(--dsw-alias-border-l2, #8883); stroke-width: 1;
         }
         .cd-tooltip-score {
@@ -358,15 +514,15 @@ window.__ModuleLoader__.load({
         .cd-day:hover { background: var(--dsw-alias-interactive-bg-hover, #8881); }
         .cd-day[data-on="1"] {
           background: var(--dsw-alias-interactive-bg-active, #8882);
-          border-color: var(--dsw-alias-brand-primary, #5b8def);
+          border-color: var(--cd-accent);
           color: var(--dsw-alias-label-primary, inherit); font-weight: 650;
         }
         .cd-day[data-missing="1"] { opacity: .38; }
         .cd-diary {
           white-space: pre-wrap; line-height: 1.72; font-size: 12.5px;
           padding: 13px 15px; border-radius: 11px;
-          background: var(--dsw-alias-bg-layer-4, #8881);
-          border: 1px solid var(--dsw-alias-border-l2, #8882);
+          background: var(--cd-fill);
+          border: 1px solid var(--cd-line);
           max-height: 460px; overflow: auto;
         }
         .cd-diary::-webkit-scrollbar { width: 6px; }
@@ -384,7 +540,7 @@ window.__ModuleLoader__.load({
         }
         .cd-skeleton::after {
           content: ""; position: absolute; inset: 0;
-          background: linear-gradient(90deg, transparent, var(--dsw-alias-bg-layer-4, #8882), transparent);
+          background: linear-gradient(90deg, transparent, var(--cd-fill-strong), transparent);
           transform: translateX(-100%);
           animation: cd-shimmer 1.5s ease-in-out infinite;
         }
@@ -1033,6 +1189,313 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 图标：刷新（逆时针的环形箭头）。
+     *
+     * 用内联 SVG 而不是 emoji：emoji 的字重和大小跟着系统字体走，
+     * 在深色主题下还经常渲染成彩色方块，跟按钮边框完全不搭。
+     * @returns {object} 元素。
+     */
+    function IconRefresh () {
+      return h('svg', { viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: '1.6', strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+        h('path', { d: 'M13.4 8a5.4 5.4 0 1 1-1.62-3.84' }),
+        h('path', { d: 'M13.4 2.6v3.2h-3.2' }))
+    }
+
+    /**
+     * 图标：设置（滑杆）。
+     *
+     * 用滑杆而不是齿轮：面板里这个按钮管的是"用哪条模型路线"，是调节类设置，
+     * 滑杆比齿轮更准确地表达"可以调"，而且在小尺寸下比齿轮清晰得多。
+     * @returns {object} 元素。
+     */
+    function IconSliders () {
+      return h('svg', { viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: '1.6', strokeLinecap: 'round', 'aria-hidden': 'true' },
+        h('path', { d: 'M2.2 4.6h5.1M10.1 4.6h3.7' }),
+        h('circle', { cx: '8.7', cy: '4.6', r: '1.5' }),
+        h('path', { d: 'M2.2 11.4h3.4M8.4 11.4h5.4' }),
+        h('circle', { cx: '7', cy: '11.4', r: '1.5' }))
+    }
+
+    /**
+     * 顶部工具栏按钮（纯图标）。
+     * @param {{title: string, onClick: Function, busy?: boolean, children: object}} props - 参数。
+     * @returns {object} 元素。
+     */
+    function IconButton (props) {
+      return h('button', {
+        type: 'button',
+        className: 'cd-icon-btn',
+        title: props.title,
+        'aria-label': props.title,
+        'data-busy': props.busy ? '1' : '0',
+        onClick: props.onClick
+      }, props.children)
+    }
+
+    /**
+     * 模型选择弹窗。
+     *
+     * 三条实现要点：
+     * 1. **打开时才拉目录**，关着的时候一次网络都不发——面板每次挂载都去拉一遍
+     *    模型清单，会把侧边栏变成一台不必要的请求发生器。
+     * 2. **推理等级挂在模型下面**，因为它是模型的能力而不是全局开关；换了模型
+     *    没有对应等级的，选中态自动落回该模型的默认等级。
+     * 3. **保存前由 Host 复核**，前端只做便利性禁用。过期目录下的选择必须被
+     *    服务端挡掉，否则会出现"存了一个不存在的模型"。
+     *
+     * @param {{onClose: Function, onSaved: Function}} props - 参数。
+     * @returns {object} 元素。
+     */
+    /**
+     * 用途的中文名。两处都要用（页签、回执文案），抽出来免得写岔。
+     * @param {string} purpose - 用途 id。
+     * @returns {string} 中文名。
+     */
+    function purposeLabel (purpose) {
+      return purpose === 'judge' ? '判好感' : '补写日记'
+    }
+
+    /**
+     * 用途的中文说明（页签下的那行小字）。
+     * @param {string} purpose - 用途 id。
+     * @returns {string} 说明。
+     */
+    function purposeHint (purpose) {
+      return purpose === 'judge'
+        ? '每一轮判加分/扣分时调用哪个模型。判分要快，建议选低思考等级。'
+        : '启动时补写欠下的日记时调用哪个模型与思考等级。'
+    }
+
+    function ModelPicker (props) {
+      // 用途：「补写日记」和「判好感」是两件事，各自有独立的选择。
+      // 一个弹窗里用页签分，而不是两个弹窗：两处都要「同一份实时目录 + 同一套
+      // 保存/复核逻辑」，拆成两个弹窗就得把那段逻辑写两遍，然后慢慢漂。
+      const [purpose, setPurpose] = react.useState('diary')
+      const [state, setState] = react.useState({ phase: 'loading', groups: [], failures: [], current: null, purposes: {}, error: null })
+      const [picked, setPicked] = react.useState(null)
+      const [effort, setEffort] = react.useState(undefined)
+      const [saving, setSaving] = react.useState(false)
+      const [message, setMessage] = react.useState(null)
+
+      const load = react.useCallback((refresh) => {
+        setState((current) => ({ ...current, phase: current.groups.length === 0 ? 'loading' : 'refreshing', error: null }))
+        fetch(MODEL_ROUTE + (refresh ? '?refresh=1' : ''), { cache: 'no-store' })
+          .then((response) => response.json().catch(() => ({})).then((body) => ({ response, body })))
+          .then(({ response, body }) => {
+            if (!response.ok || body?.ok === false) throw new Error(String(body?.error ?? ('HTTP ' + response.status)))
+            const groups = Array.isArray(body.groups) ? body.groups : []
+            const purposes = body.purposes && typeof body.purposes === 'object' ? body.purposes : {}
+            setState({
+              phase: 'ready',
+              groups,
+              failures: Array.isArray(body.failures) ? body.failures : [],
+              current: body.current ?? null,
+              // 两个用途的当前值一次带回来，切页签不用再发请求
+              purposes,
+              error: null
+            })
+            // 首屏落在「补写日记」页签，选中态要用已存值——否则明明存过，
+            // 界面上却没有一个高亮项，看起来像没设过。
+            // 只在第一次加载时兜底（`??`），重拉不该覆盖用户正在改的选择。
+            const initial = purposes.diary
+            if (initial && initial.source === 'stored' && initial.provider && initial.model) {
+              setPicked((previous) => previous ?? { provider: initial.provider, model: initial.model })
+              setEffort((previous) => previous !== undefined ? previous : initial.reasoningEffort)
+            }
+          })
+          .catch((error) => setState((current) => ({ ...current, phase: 'failed', error: String(error?.message ?? error) })))
+      }, [])
+
+      react.useEffect(() => { load(false) }, [load])
+
+      // 切页签时把选中态换成那一侧的已存值。**不要**沿用上一页签的选中项：
+      // 那会让「判分」一栏默认高亮日记用的模型，看起来像已经设过了。
+      const applyPurpose = (next) => {
+        setPurpose(next)
+        setMessage(null)
+        const entry = state.purposes?.[next]
+        const hasStored = entry && entry.source === 'stored' && entry.provider && entry.model
+        setPicked(hasStored ? { provider: entry.provider, model: entry.model } : null)
+        setEffort(hasStored ? entry.reasoningEffort : undefined)
+      }
+
+      const modelOf = (providerId, modelId) => {
+        const group = state.groups.find((item) => item.id === providerId)
+        return group ? group.models.find((item) => item.id === modelId) ?? null : null
+      }
+      const pickedModel = picked === null ? null : modelOf(picked.provider, picked.model)
+      const efforts = pickedModel?.reasoning?.efforts ?? []
+
+      // 换模型时把不支持的等级收回来：留着上一个模型的等级去保存，
+      // 会被 Host 拒绝，而用户看到的是"保存失败"而不是"你换模型了"。
+      const choose = (providerId, modelId) => {
+        setMessage(null)
+        const next = modelOf(providerId, modelId)
+        const list = next?.reasoning?.efforts ?? []
+        setPicked({ provider: providerId, model: modelId })
+        setEffort((previous) => {
+          if (list.length === 0) return undefined
+          if (previous !== undefined && list.some((item) => item.id === previous)) return previous
+          return next?.reasoning?.defaultEffort ?? list[0].id
+        })
+      }
+
+      const save = () => {
+        if (picked === null) { setMessage({ tone: 'bad', text: '先选一个模型' }); return }
+        setSaving(true)
+        setMessage(null)
+        const payload = {
+          provider: picked.provider,
+          model: picked.model,
+          ...(effort === undefined ? {} : { reasoningEffort: effort })
+        }
+        fetch(MODEL_ROUTE + '?purpose=' + purpose, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+          .then((response) => response.json().catch(() => ({})).then((body) => ({ response, body })))
+          .then(({ response, body }) => {
+            if (!response.ok || body?.ok === false) throw new Error(String(body?.error ?? ('HTTP ' + response.status)))
+            const current = body.current ?? null
+            setMessage({ tone: 'good', text: '已保存（' + purposeLabel(purpose) + '）：' + String(current?.model ?? payload.model) })
+            setState((previous) => ({
+              ...previous,
+              purposes: { ...(previous.purposes ?? {}), [purpose]: current }
+            }))
+            if (typeof props.onSaved === 'function') props.onSaved(current)
+          })
+          .catch((error) => setMessage({ tone: 'bad', text: '保存失败：' + String(error?.message ?? error) }))
+          .then(() => setSaving(false))
+      }
+
+      const reset = () => {
+        setSaving(true)
+        setMessage(null)
+        fetch(MODEL_ROUTE + '?purpose=' + purpose, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reset: true })
+        })
+          .then((response) => response.json().catch(() => ({})))
+          .then((body) => {
+            setPicked(null)
+            setEffort(undefined)
+            setMessage({ tone: 'good', text: purposeLabel(purpose) + '已恢复为跟随默认' })
+            setState((previous) => ({
+              ...previous,
+              purposes: { ...(previous.purposes ?? {}), [purpose]: body?.current ?? null }
+            }))
+            if (typeof props.onSaved === 'function') props.onSaved(body?.current ?? null)
+          })
+          .catch((error) => setMessage({ tone: 'bad', text: '恢复失败：' + String(error?.message ?? error) }))
+          .then(() => setSaving(false))
+      }
+
+      // 当前值要跟着**页签**走，不能再用一根全局的 state.current：
+      // 切到「判好感」时显示的必须是判分那一侧的值。
+      const currentEntry = state.purposes?.[purpose] ?? (purpose === 'diary' ? state.current : null)
+      const sourceLabel = (source) => {
+        if (source === 'stored') return '（已保存）'
+        if (source === 'config') return '（来自配置）'
+        if (source === 'session') return '（跟随当前会话）'
+        if (source === 'host') return '（宿主默认）'
+        return ''
+      }
+      const currentLabel = currentEntry === undefined || currentEntry === null
+        ? (state.phase === 'loading' ? '读取中…' : '未设置')
+        : currentEntry.provider
+          ? currentEntry.provider + ' / ' + currentEntry.model
+            + (currentEntry.reasoningEffort ? ' · ' + currentEntry.reasoningEffort : '')
+            + sourceLabel(currentEntry.source)
+          : purpose === 'judge'
+            ? '未设置——判分时跟随当前会话所用的模型'
+            : '未设置——补写时跟随宿主默认模型'
+
+      const body = state.phase === 'loading'
+        ? h('div', { className: 'cd-empty' }, '正在读取模型清单…')
+        : state.phase === 'failed'
+          ? h('div', { className: 'cd-empty' },
+            '模型清单读取失败',
+            h('div', { style: { marginTop: '10px' } },
+              h('button', { type: 'button', className: 'cd-modal-btn', onClick: () => load(true) }, '重试')))
+          : h('div', null,
+            state.groups.length === 0
+              ? h('div', { className: 'cd-empty' }, '宿主没有任何可用的模型渠道')
+              : null,
+            ...state.groups.map((group) => h('div', { key: 'g-' + group.id },
+              h('div', { className: 'cd-group-label' }, group.name || group.id),
+              ...group.models.map((model) => {
+                const on = picked !== null && picked.provider === group.id && picked.model === model.id
+                const levels = model.reasoning?.efforts ?? []
+                return h('div', { key: group.id + '/' + model.id },
+                  h('button', {
+                    type: 'button',
+                    className: 'cd-model',
+                    'data-on': on ? '1' : '0',
+                    onClick: () => choose(group.id, model.id)
+                  },
+                  h('span', { className: 'cd-model-name' }, model.name || model.id),
+                  h('span', { className: 'cd-model-id' }, model.id)),
+                  on && levels.length > 0
+                    ? h('div', { className: 'cd-efforts' }, ...levels.map((level) => h('button', {
+                      key: level.id,
+                      type: 'button',
+                      className: 'cd-effort',
+                      'data-on': effort === level.id ? '1' : '0',
+                      title: level.description ?? '',
+                      onClick: () => { setEffort(level.id); setMessage(null) }
+                    }, level.name || level.id)))
+                    : null)
+              }))),
+            state.failures.length === 0
+              ? null
+              : h('div', { key: 'failures' },
+                h('div', { className: 'cd-group-label' }, '读不到的渠道'),
+                ...state.failures.map((item) => h('div', { key: 'f-' + item.id, className: 'cd-model-fail' },
+                  (item.name || item.id) + '：' + String(item.message ?? '')))))
+
+      const tabs = h('div', { className: 'cd-tabs' },
+        ...[['diary', '补写日记'], ['judge', '判好感']].map(([id, label]) => h('button', {
+          key: id,
+          type: 'button',
+          className: 'cd-tab',
+          'data-on': purpose === id ? '1' : '0',
+          onClick: () => applyPurpose(id)
+        }, label)))
+
+      return h('div', {
+        className: 'cd-mask',
+        onMouseDown: (event) => { if (event.target === event.currentTarget) props.onClose() }
+      },
+      h('div', { className: 'cd-modal', role: 'dialog', 'aria-label': '模型设置' },
+        h('div', { className: 'cd-modal-head' },
+          h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
+            h('div', { className: 'cd-modal-title' }, '模型设置'),
+            h('div', { className: 'cd-modal-sub' }, purposeHint(purpose))),
+          h('button', { type: 'button', className: 'cd-modal-x', title: '关闭', onClick: props.onClose },
+            h('svg', { viewBox: '0 0 12 12', fill: 'none', stroke: 'currentColor', strokeWidth: '1.6', strokeLinecap: 'round' },
+              h('path', { d: 'M2.5 2.5l7 7M9.5 2.5l-7 7' })))),
+        tabs,
+        h('div', { className: 'cd-modal-current' },
+          h('div', null, purposeLabel(purpose) + '当前：', h('b', null, currentLabel)),
+          h('div', { style: { marginTop: '3px', opacity: '.55' } },
+            '列表实时取自宿主已注册的渠道；某个渠道读不到时只影响它自己。')),
+        h('div', { className: 'cd-modal-body' }, body),
+        h('div', { className: 'cd-modal-foot' },
+          h('div', { className: 'cd-modal-msg', 'data-tone': message?.tone === 'bad' ? 'bad' : '0' },
+            message === null ? '' : message.text),
+          h('button', { type: 'button', className: 'cd-modal-btn ghost', onClick: reset }, '跟随默认'),
+          h('button', { type: 'button', className: 'cd-modal-btn', onClick: () => load(true) }, '重拉'),
+          h('button', {
+            type: 'button',
+            className: 'cd-modal-btn primary',
+            'data-disabled': saving || picked === null ? '1' : '0',
+            onClick: save
+          }, saving ? '保存中…' : '保存'))))
+    }
+
+    /**
      * 挑一个可读的默认日记日：最新的、存在正文的那一天。
      * @param {object[]} days - 概览里的 diaryDays。
      * @returns {string|null} 日键。
@@ -1061,6 +1524,8 @@ window.__ModuleLoader__.load({
       const [range, setRange] = react.useState('7d')
       const [day, setDay] = react.useState(null)
       const [diary, setDiary] = react.useState({ phase: 'idle', day: null, text: null, error: null })
+      // 弹窗开着才挂载，关掉就整棵卸载——顺手把里面那次目录请求的生命周期也一起结束。
+      const [pickerOpen, setPickerOpen] = react.useState(false)
 
       const load = react.useCallback(() => {
         setState((current) => ({ phase: current.data === null ? 'loading' : 'refreshing', data: current.data, error: null }))
@@ -1105,13 +1570,16 @@ window.__ModuleLoader__.load({
         const failed = state.phase === 'failed'
         return h('div', { className: 'cd-panel' },
           h('div', { className: 'cd-top' },
-            h('span', { className: 'cd-title' }, '日记 / 好感度')),
+            h('span', { className: 'cd-title' }, '日记 / 好感度'),
+            h(IconButton, { title: '模型设置（补写日记 / 判好感）', onClick: () => setPickerOpen(true) }, h(IconSliders, null)),
+            h(IconButton, { title: '刷新', busy: state.phase === 'refreshing', onClick: load }, h(IconRefresh, null))),
+          pickerOpen ? h(ModelPicker, { onClose: () => setPickerOpen(false), onSaved: () => {} }) : null,
           h('div', { className: 'cd-scroll' },
             failed
               ? h('div', { className: 'cd-empty' },
                 '读取失败',
                 h('div', { style: { marginTop: '12px' } },
-                  h('button', { type: 'button', className: 'cd-btn', onClick: load }, '重试')))
+                  h('button', { type: 'button', className: 'cd-btn', onClick: () => load() }, '重试')))
               : h('div', null,
                 h('div', { className: 'cd-skeleton' }),
                 h('div', { className: 'cd-skeleton', style: { height: '120px' } }),
@@ -1239,17 +1707,30 @@ window.__ModuleLoader__.load({
         diaryBody)
 
       const foot = h('div', { className: 'cd-foot' },
-        '数据来源：好感度账本（唯一写入方）。本面板只读，不判定、不补分、不生成日记。')
+        '数据来源：好感度账本（唯一写入方）。面板只读取分与日记；唯一的写操作是顶栏设置里的模型选择（补写日记 / 判好感）。')
 
       return h('div', { className: 'cd-panel' },
         h('div', { className: 'cd-top' },
           h('span', { className: 'cd-title' }, '日记 / 好感度'),
-          h('button', {
-            type: 'button',
-            className: 'cd-btn',
-            'data-busy': state.phase === 'refreshing' ? '1' : '0',
+          // 图标按钮：设置在前、刷新在后，刷新永远在最右——手掌记忆里
+          // "最右边那一下"就是刷新，换位置会让人点错保存。
+          h(IconButton, {
+            title: '模型设置（补写日记 / 判好感）',
+            onClick: () => setPickerOpen(true)
+          }, h(IconSliders, null)),
+          h(IconButton, {
+            title: state.phase === 'refreshing' ? '刷新中…' : '刷新',
+            busy: state.phase === 'refreshing',
             onClick: load
-          }, state.phase === 'refreshing' ? '刷新中' : '刷新')),
+          }, h(IconRefresh, null))),
+        pickerOpen
+          ? h(ModelPicker, {
+            onClose: () => setPickerOpen(false),
+            // 保存成功**不关窗**：让「已保存：xxx」这条回执留在原地。
+            // 关掉再弹一个 toast 是两套通知机制，没必要。
+            onSaved: null
+          })
+          : null,
         h('div', { className: 'cd-scroll' },
           hero,
           seg,
@@ -1308,6 +1789,8 @@ window.__ModuleLoader__.load({
     exports.TAB_KIND = TAB_KIND
     exports.OVERVIEW_ROUTE = OVERVIEW_ROUTE
     exports.DIARY_ROUTE = DIARY_ROUTE
+    exports.MODEL_ROUTE = MODEL_ROUTE
+    exports.ModelPicker = ModelPicker
     exports.pickDefaultDay = pickDefaultDay
     return module.exports
   }

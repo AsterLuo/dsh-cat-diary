@@ -1,6 +1,6 @@
 {
   "name": "dsh-affinity",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "好感度的唯一写入方：每轮由模型自己判断该加分还是扣分，单次 ±2、每日绝对值累计 ±10，跨会话连续不重置。其他插件只读。",
   "type": "module",
   "main": "lib/index.js",
@@ -8,7 +8,8 @@
     ".": "./lib/index.js",
     "./ledger": "./lib/ledger.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./judge-route": "./lib/judge-route.js"
   },
   "files": [
     "lib",

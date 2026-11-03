@@ -122,12 +122,12 @@ dsh plugin --profile <your-profile> add github:AsterLuo/dsh-cat-diary
 Pin a version:
 
 ```bash
-dsh plugin --profile <your-profile> add github:AsterLuo/dsh-cat-diary#v1.0.0
+dsh plugin --profile <your-profile> add github:AsterLuo/dsh-cat-diary#v1.1.0
 ```
 
 ### Option 2: download the release zip
 
-Grab `dsh-cat-diary-v1.0.0.zip` from [Releases](https://github.com/AsterLuo/dsh-cat-diary/releases),
+Grab `dsh-cat-diary-v1.1.0.zip` from [Releases](https://github.com/AsterLuo/dsh-cat-diary/releases),
 extract it into `<DSH_HOME>/profiles/<profile>/node_modules/dsh-cat-diary/`,
 then add the dependency and the `dsh.profile.bundles` entry to the profile's `package.json`.
 

@@ -113,12 +113,12 @@ dsh plugin --profile <你的profile> add github:AsterLuo/dsh-cat-diary
 指定版本：
 
 ```bash
-dsh plugin --profile <你的profile> add github:AsterLuo/dsh-cat-diary#v1.0.0
+dsh plugin --profile <你的profile> add github:AsterLuo/dsh-cat-diary#v1.1.0
 ```
 
 ### 方式二：下载 release 里的 zip
 
-在 [Releases](https://github.com/AsterLuo/dsh-cat-diary/releases) 下载 `dsh-cat-diary-v1.0.0.zip`，
+在 [Releases](https://github.com/AsterLuo/dsh-cat-diary/releases) 下载 `dsh-cat-diary-v1.1.0.zip`，
 解压到 `<DSH_HOME>/profiles/<profile>/node_modules/dsh-cat-diary/`，
 然后在 profile 的 `package.json` 里加上依赖并写入 `dsh.profile.bundles`。
 
